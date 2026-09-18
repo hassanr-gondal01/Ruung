@@ -1,0 +1,16 @@
+{
+  "name": "rung-online",
+  "version": "1.0.0",
+  "description": "Online 4-player Rung/Ruung card game with real-time multiplayer via Socket.IO",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
