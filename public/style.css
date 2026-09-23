@@ -46,6 +46,7 @@ h3{font-size:1.05rem; font-weight:700;}
   border-radius:20px; padding:6px 13px; font-size:.78rem; font-weight:700; white-space:nowrap;}
 .info-pill.trump-pill{color:var(--gold); border-color:rgba(217,168,40,.4);}
 .info-pill.wasted-pill{color:var(--gold); border:1.5px solid var(--gold); background:transparent; animation:pulseTurn 2.2s ease-in-out infinite;}
+.info-pill.pausing-pill{color:#8ad9a8; border:1.5px solid #8ad9a8; background:transparent;}
 .score-pill{display:flex;gap:10px;align-items:center;font-weight:600;font-size:.88rem; color:var(--text-dim);
   background:var(--panel-2); padding:6px 12px; border-radius:20px; border:1px solid var(--panel-border);}
 .score-pill span.a{color:var(--accent2); font-weight:800;} .score-pill span.b{color:var(--accentB2); font-weight:800;}
@@ -73,6 +74,9 @@ input[type=text]:focus{border-color:var(--gold);}
 .seat-card.teamA{border-color:var(--accent);} .seat-card.teamB{border-color:var(--accentB);}
 .team-tag{font-size:.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
 .team-tag.a{color:var(--accent2);} .team-tag.b{color:var(--accentB2);}
+.series-target-row{display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;
+  margin:6px 0 14px; font-size:.9rem; color:var(--text-dim);}
+.series-target-value{font-weight:800; font-size:1.1rem; color:var(--text); min-width:1.5em; text-align:center;}
 
 /* TABLE */
 .table-wrap{position:relative;width:100%;max-width:640px;aspect-ratio:1/1;margin:14px auto;
@@ -94,6 +98,7 @@ input[type=text]:focus{border-color:var(--gold);}
 @keyframes pulseTurn{0%,100%{box-shadow:0 0 0 3px rgba(217,168,40,.22),0 3px 10px var(--shadow);} 50%{box-shadow:0 0 0 7px rgba(217,168,40,.12),0 3px 10px var(--shadow);}}
 .player-chip.me{background:linear-gradient(180deg,var(--accent),var(--accent2));color:#fff;border-color:var(--accent2);}
 .player-chip .streak{color:var(--gold); font-weight:800;}
+.player-chip .crown{filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));}
 .cards-left{font-size:.66rem; color:rgba(255,255,255,.65); margin-top:2px; font-weight:600; letter-spacing:.02em;}
 .trick-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:56%;height:56%;}
 .trick-slot{position:absolute;width:15%; filter:drop-shadow(0 4px 8px rgba(0,0,0,.4));}
@@ -108,6 +113,26 @@ input[type=text]:focus{border-color:var(--gold);}
 .card-mini.pending-card{background:transparent; border:2px dashed rgba(217,168,40,.6); box-shadow:none; color:var(--gold); font-size:1rem; animation:pulseTurn 1.8s ease-in-out infinite;}
 .center-info{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#fff;
   font-size:.75rem;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.6);}
+
+/* ELEPHANT — walks a continuous circle around the table. Outer div spins;
+   inner div counter-spins at the same rate so the emoji itself stays
+   upright while still tracing the circle. */
+.elephant-orbit{position:absolute; inset:0; pointer-events:none; z-index:6;
+  animation:orbitSpin 16s linear infinite;}
+@keyframes orbitSpin{ from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+.elephant-counter{position:absolute; top:1%; left:50%; font-size:1.7rem;
+  animation:orbitCounter 16s linear infinite; filter:drop-shadow(0 2px 4px rgba(0,0,0,.4));}
+@keyframes orbitCounter{
+  from{transform:translate(-50%,-50%) rotate(0deg);}
+  to{transform:translate(-50%,-50%) rotate(-360deg);}
+}
+.poop-drop{position:absolute; top:100%; left:50%; transform:translateX(-50%); font-size:1.3rem;
+  margin-top:2px; animation:poopBounce .5s ease-out; z-index:4;}
+@keyframes poopBounce{
+  0%{transform:translateX(-50%) translateY(-14px) scale(.4); opacity:0;}
+  60%{transform:translateX(-50%) translateY(2px) scale(1.15); opacity:1;}
+  100%{transform:translateX(-50%) translateY(0) scale(1); opacity:1;}
+}
 
 /* HAND */
 .hand-row{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;padding:10px 2px;margin-top:6px;}

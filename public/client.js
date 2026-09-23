@@ -141,8 +141,16 @@ function connect(){
 
 /* ---------- actions (server validates everything; client just expresses intent) ---------- */
 function claimSeat(i){ if(busy) return; setBusy(); socket.emit('claimSeat', { seatIndex:i, name:myName }); }
+function addBot(i){ if(busy) return; setBusy(); socket.emit('addBot', { seatIndex:i }); }
+function removeBot(i){ if(busy) return; setBusy(); socket.emit('removeBot', { seatIndex:i }); }
 function leaveSeat(){ if(busy) return; setBusy(); socket.emit('leaveSeat'); }
 function startGame(){ if(busy) return; setBusy(); socket.emit('startGame'); }
+function startNewSeries(){ if(busy) return; setBusy(); socket.emit('startNewSeries'); }
+function setSeriesTarget(delta){
+  if(!gameState) return;
+  const next = Math.max(1, Math.min(100, (gameState.seriesTarget||10) + delta));
+  socket.emit('setSeriesTarget', { value: next });
+}
 function placeBid(suit, level){ if(busy) return; setBusy(); socket.emit('placeBid', { suit, level }); }
 function passBid(){ if(busy) return; setBusy(); socket.emit('passBid'); }
 function redealWeakHand(){ if(busy) return; setBusy(); socket.emit('redealWeakHand'); }
@@ -157,6 +165,15 @@ function cardsLeftForSeat(idx){
   const tricksDone = gameState.play.trickNumber - 1;
   const hasPlayedThisTrick = gameState.play.trick[idx]!=null;
   return 13 - tricksDone - (hasPlayedThisTrick?1:0);
+}
+// On a Goon Court (bidding team shut out, 0 tricks), the elephant leaves a
+// little "present" at the losing (bidding) team's two seats.
+function poopHtmlForSeat(idx){
+  if(gameState.phase!=='handover') return '';
+  const r = gameState.lastResult;
+  if(!r || r.label!=='Goon Court') return '';
+  if(teamOf(idx)!==r.biddingTeam) return '';
+  return `<div class="poop-drop">💩</div>`;
 }
 function legalCards(hand, ledSuit){
   if(!ledSuit) return hand.slice();
@@ -183,6 +200,7 @@ function render(){
   const seat = mySeat;
   let html = header(seat);
   if(gameState.phase==='lobby') html += renderLobby(seat, seatNameFn);
+  else if(gameState.phase==='series_end') html += renderSeriesEnd(seat);
   else html += renderTable(seat, seatNameFn);
   html += renderLog();
   app.innerHTML = html;
@@ -197,7 +215,7 @@ function header(seat){
        <button class="btn ghost small" onclick="toggleResetConfirm()">Cancel</button>`
     : `<button class="btn ghost small" onclick="toggleResetConfirm()">Reset Table</button>`;
 
-  const inGame = gameState.phase==='bidding' || gameState.phase==='playing' || gameState.phase==='handover';
+  const inGame = gameState.phase==='bidding' || gameState.phase==='playing' || gameState.phase==='handover' || gameState.phase==='series_end';
   let infoPills = '';
   if(inGame){
     infoPills += `<span class="info-pill">Round ${gameState.handNumber+1}</span>`;
@@ -206,7 +224,8 @@ function header(seat){
       infoPills += `<span class="info-pill">Contract ${gameState.trump.level}</span>`;
     }
   }
-  infoPills += `<span class="info-pill">${usThemLabel(ms.A||0, ms.B||0, myTeam, 'Games')}</span>`;
+  const targetTxt = gameState.seriesTarget ? ` (first to ${gameState.seriesTarget})` : '';
+  infoPills += `<span class="info-pill">${usThemLabel(ms.A||0, ms.B||0, myTeam, 'Score')}${targetTxt}</span>`;
 
   return `<div class="header">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -223,19 +242,30 @@ function renderLobby(seat, seatName){
   for(let i=0;i<4;i++){
     const s = gameState.seats[i];
     const team = teamOf(i);
+    const isBot = s && s.isBot;
     seatsHtml += `<div class="seat-card ${s?'filled':''} team${team}">
       <div class="team-tag ${team.toLowerCase()}">Team ${team} · Seat ${i}</div>
-      <div>${s ? seatName(i) + (i===seat?' <span class="you-tag">YOU</span>':'') : '<span class="muted">Empty</span>'}</div>
+      <div>${s ? (isBot?'🤖 ':'') + seatName(i) + (i===seat?' <span class="you-tag">YOU</span>':'') : '<span class="muted">Empty</span>'}</div>
       ${(!s && seat===null) ? `<button class="btn small" onclick="claimSeat(${i})">Sit here</button>` : ''}
-      ${(s && i===seat) ? `<button class="btn ghost small" onclick="leaveSeat()">Leave</button>` : ''}
+      ${(!s) ? `<button class="btn ghost small" onclick="addBot(${i})">Add Expert Bot</button>` : ''}
+      ${(s && i===seat && !isBot) ? `<button class="btn ghost small" onclick="leaveSeat()">Leave</button>` : ''}
+      ${(isBot) ? `<button class="btn ghost small" onclick="removeBot(${i})">Remove Bot</button>` : ''}
     </div>`;
   }
   const allFilled = [0,1,2,3].every(i=>gameState.seats[i]);
+  const target = gameState.seriesTarget||10;
   return `<div class="panel">
     <h3>Lobby</h3>
-    <p class="muted">4 players, 2 teams of 2. Partners sit opposite each other — pick any empty seat. Share this room's link with your 3 friends.</p>
+    <p class="muted">4 players, 2 teams of 2. Partners sit opposite each other — pick any empty seat. Share this room's link with your 3 friends, or fill empty seats with Expert bots.</p>
     <div class="seats-grid">${seatsHtml}</div>
-    ${allFilled ? `<button class="btn" onclick="startGame()">Start Game</button>` : `<p class="muted">Waiting for ${4-[0,1,2,3].filter(i=>gameState.seats[i]).length} more player(s)…</p>`}
+    <div class="series-target-row">
+      <span>First to</span>
+      <button class="btn ghost small" onclick="setSeriesTarget(-1)">−</button>
+      <span class="series-target-value">${target}</span>
+      <button class="btn ghost small" onclick="setSeriesTarget(1)">+</button>
+      <span>points wins the series</span>
+    </div>
+    ${allFilled ? `<button class="btn" onclick="startGame()">Start Game</button>` : `<p class="muted">Waiting for ${4-[0,1,2,3].filter(i=>gameState.seats[i]).length} more player(s)… or add bots to fill the empty seats.</p>`}
   </div>`;
 }
 
@@ -246,16 +276,20 @@ function renderTable(seat, seatName){
     const idx = (mySeatIdx+off)%4;
     const pos = POSITIONS[off];
     const biddingTurn = gameState.phase==='bidding' && gameState.bidding.turnSeat===idx;
-    const isTurn = biddingTurn || (gameState.phase==='playing' && gameState.play.turnSeat===idx);
+    const isTurn = biddingTurn || (gameState.phase==='playing' && !gameState.play.pausing && gameState.play.turnSeat===idx);
     const streakTag = (gameState.phase==='playing' && gameState.play.streakSeat===idx && gameState.play.streakCount>0)
       ? ` <span class="streak">🔥${gameState.play.streakCount}</span>` : '';
+    // The crown marks whoever is currently senior — they lead the next trick.
+    const crownTag = (gameState.phase==='playing' && gameState.play.leadSeat===idx) ? ` <span class="crown">👑</span>` : '';
+    const botTag = (gameState.seats[idx] && gameState.seats[idx].isBot) ? '🤖 ' : '';
     const left = cardsLeftForSeat(idx);
     const cardsLeftTag = left!=null ? `<div class="cards-left">${left} card${left===1?'':'s'} left</div>` : '';
     seatsHtml += `<div class="seat-pos ${pos}">
       <div class="player-chip ${isTurn?'turn':''} ${idx===seat?'me':''}">
-        ${seatName(idx)} · T${teamOf(idx)}${streakTag}
+        ${crownTag}${botTag}${seatName(idx)} · T${teamOf(idx)}${streakTag}
       </div>
       ${cardsLeftTag}
+      ${poopHtmlForSeat(idx)}
     </div>`;
   }
   let trickHtml='';
@@ -266,7 +300,7 @@ function renderTable(seat, seatName){
       let slotInner = '';
       if(card){
         slotInner = cardEl(card,{small:true});
-      } else if(gameState.play.turnSeat===idx){
+      } else if(gameState.play.turnSeat===idx && !gameState.play.pausing){
         slotInner = `<div class="card-mini pending-card">⏳</div>`;
       }
       trickHtml += `<div class="trick-slot ${pos}">${slotInner}</div>`;
@@ -282,7 +316,10 @@ function renderTable(seat, seatName){
   const wastedBadge = (gameState.phase==='playing' && gameState.play.trickNumber===12)
     ? `<span class="info-pill wasted-pill">Wasted round</span>`
     : '';
-  const waitingOnLine = gameState.phase==='playing'
+  const pausingBadge = (gameState.phase==='playing' && gameState.play.pausing)
+    ? `<span class="info-pill pausing-pill">Trick complete — next round starting…</span>`
+    : '';
+  const waitingOnLine = (gameState.phase==='playing' && !gameState.play.pausing)
     ? (()=>{
         const pending = [0,1,2,3].filter(i=>gameState.play.trick[i]==null);
         if(pending.length===0 || pending.length===4) return '';
@@ -296,10 +333,11 @@ function renderTable(seat, seatName){
   else if(gameState.phase==='handover') bottomPanel = renderHandover();
 
   return `
-  <div class="panel" style="text-align:center;">${trickBadge} ${wastedBadge} ${bankBadges}${waitingOnLine}</div>
+  <div class="panel" style="text-align:center;">${trickBadge} ${wastedBadge} ${pausingBadge} ${bankBadges}${waitingOnLine}</div>
   <div class="table-wrap">
     ${seatsHtml}
     <div class="trick-center">${trickHtml}</div>
+    <div class="elephant-orbit"><div class="elephant-counter">🐘</div></div>
   </div>
   ${bottomPanel}`;
 }
@@ -317,12 +355,20 @@ function renderBidding(seat, seatName){
     </div>`;
   }
 
+  let cutNote = '';
+  if(gameState.handNumber===0 && gameState.lastCut && gameState.lastCut.cutCards){
+    const cc = gameState.lastCut.cutCards;
+    const cutHtml = [0,1,2,3].map(i=>`${seatName(i)}: ${rankLabel(rankOf(cc[i]))}${SUIT_SYMBOL[suitOf(cc[i])]}`).join(' · ');
+    cutNote = `<p class="muted" style="margin-top:6px;">Cut for deal — ${cutHtml}</p>`;
+  }
+
   let body = `<h3>Bidding</h3>`;
   if(b.holderSeat!==null){
     body += `<p>Current call: <b>${b.level} of ${SUIT_NAME[b.suit]} ${SUIT_SYMBOL[b.suit]}</b> by ${seatName(b.holderSeat)} (Team ${teamOf(b.holderSeat)})</p>`;
   } else {
     body += `<p class="muted">${seatName(b.turnSeat)} opens the bidding.</p>`;
   }
+  body += cutNote;
   if(!isMyTurn){
     body += `<p class="muted">Waiting for ${seatName(b.turnSeat)} to act…</p>`;
   } else {
@@ -347,22 +393,31 @@ function renderBidding(seat, seatName){
         body += `</div></div>`;
       });
     }
-    if(b.level>0){
-      body += `<div style="margin-top:10px;"><button class="btn ghost" onclick="passBid()">Pass</button></div>`;
-    }
+    body += `<div style="margin-top:10px;"><button class="btn ghost" onclick="passBid()">Pass</button></div>`;
   }
   return `${handPanel}<div class="panel">${body}</div>`;
 }
 
 function renderPlaying(seat){
   if(seat===null) return `<div class="panel muted">You're spectating this hand.</div>`;
-  const isMyTurn = gameState.play.turnSeat===seat && !busy;
+  const isMyTurn = gameState.play.turnSeat===seat && !busy && !gameState.play.pausing;
   const legal = isMyTurn ? legalCards(myHand, gameState.play.ledSuit) : [];
   let cardsHtml = myHand.map(c=>cardEl(c, {clickable:true, disabled: !legal.includes(c)})).join('');
+  const turnLabel = gameState.play.pausing ? '' : (gameState.play.turnSeat===seat ? (busy?'— playing…':'— your turn!') : '');
   return `<div class="panel">
-    <h3>Your Hand ${gameState.play.turnSeat===seat ? (busy?'— playing…':'— your turn!') : ''}</h3>
+    <h3>Your Hand ${turnLabel}</h3>
     <div class="hand-row">${cardsHtml || '<span class="muted">No cards yet.</span>'}</div>
   </div>`;
+}
+
+function outcomeLine(r){
+  const labels = {
+    Court: `👑 COURT — Team ${r.biddingTeam} swept all 13 tricks! +${r.pointsAwarded} points`,
+    Made: `Team ${r.biddingTeam} made their bid — +${r.pointsAwarded} point`,
+    'Goon Court': `💀 GOON COURT — Team ${r.biddingTeam} was shut out! +${r.pointsAwarded} points for Team ${r.handWinnerTeam}`,
+    Set: `Team ${r.biddingTeam} fell short — +${r.pointsAwarded} point for Team ${r.handWinnerTeam}`,
+  };
+  return labels[r.label] || '';
 }
 
 function renderHandover(){
@@ -371,10 +426,23 @@ function renderHandover(){
   return `<div class="panel">
     <h3>Hand ${gameState.handNumber+1} Result</h3>
     <div class="result-row"><span>Bid</span><span>${r.bidLevel} of ${SUIT_NAME[r.suit]} ${SUIT_SYMBOL[r.suit]} (Team ${r.biddingTeam})</span></div>
-    <div class="result-row"><span>Team A banked</span><span>${r.bankedA}</span></div>
-    <div class="result-row"><span>Team B banked</span><span>${r.bankedB}</span></div>
-    <div class="result-row"><span>Outcome</span><span><b>Team ${r.handWinnerTeam} wins the hand</b> (${r.success?'bid made':'bid failed'})</span></div>
+    <div class="result-row"><span>Team A tricks won</span><span>${r.tricksWonA}</span></div>
+    <div class="result-row"><span>Team B tricks won</span><span>${r.tricksWonB}</span></div>
+    <div class="result-row"><span>Banked (for contract)</span><span>A: ${r.bankedA} · B: ${r.bankedB}</span></div>
+    <div class="result-row"><span>Outcome</span><span><b>${outcomeLine(r)}</b></span></div>
     <button class="btn" style="margin-top:10px;" onclick="nextHand()">Deal Next Hand</button>
+  </div>`;
+}
+
+function renderSeriesEnd(seat){
+  const r = gameState.lastResult;
+  const ms = gameState.matchScore||{A:0,B:0};
+  const winner = gameState.seriesWinner;
+  return `<div class="panel" style="text-align:center;">
+    <h3>🏆 Series Complete!</h3>
+    <p style="font-size:1.1rem;">Team ${winner} wins the series, ${ms.A} to ${ms.B}!</p>
+    ${r ? `<p class="muted">${outcomeLine(r)}</p>` : ''}
+    <button class="btn" style="margin-top:10px;" onclick="startNewSeries()">Start New Series</button>
   </div>`;
 }
 
