@@ -168,12 +168,10 @@ function cardsLeftForSeat(idx){
 }
 // On a Goon Court (bidding team shut out, 0 tricks), the elephant leaves a
 // little "present" at the losing (bidding) team's two seats.
-function poopHtmlForSeat(idx){
-  if(gameState.phase!=='handover') return '';
+function centerPoopHtml(){
   const r = gameState.lastResult;
-  if(!r || r.label!=='Goon Court') return '';
-  if(teamOf(idx)!==r.biddingTeam) return '';
-  return `<div class="poop-drop">💩</div>`;
+  if(gameState.phase!=='handover' || !r || r.label!=='Goon Court') return '';
+  return `<div class="poop-center">💩</div>`;
 }
 function legalCards(hand, ledSuit){
   if(!ledSuit) return hand.slice();
@@ -184,8 +182,9 @@ function cardEl(card, {clickable=false, disabled=false, small=false}={}){
   const r = rankOf(card), s = suitOf(card);
   const cls = SUIT_COLOR[s];
   const cname = small ? 'card-mini' : 'card';
+  const idx = small ? '' : `<div class="card-idx">${rankLabel(r)}<br>${SUIT_SYMBOL[s]}</div>`;
   return `<div class="${cname} ${cls}${disabled?' disabled':''}" ${clickable&&!disabled?`onclick="playCard('${card}')"`:''}>
-    <div>${rankLabel(r)}</div><div style="font-size:${small?'1em':'1.3em'}">${SUIT_SYMBOL[s]}</div>
+    ${idx}<div>${rankLabel(r)}</div><div style="font-size:${small?'1em':'1.3em'}">${SUIT_SYMBOL[s]}</div>
   </div>`;
 }
 
@@ -202,7 +201,6 @@ function render(){
   if(gameState.phase==='lobby') html += renderLobby(seat, seatNameFn);
   else if(gameState.phase==='series_end') html += renderSeriesEnd(seat);
   else html += renderTable(seat, seatNameFn);
-  html += renderLog();
   app.innerHTML = html;
 }
 
@@ -221,7 +219,7 @@ function header(seat){
     infoPills += `<span class="info-pill">Round ${gameState.handNumber+1}</span>`;
     if(gameState.trump && gameState.trump.suit){
       infoPills += `<span class="info-pill trump-pill">Trump ${SUIT_SYMBOL[gameState.trump.suit]}</span>`;
-      infoPills += `<span class="info-pill">Contract ${gameState.trump.level}</span>`;
+      infoPills += `<span class="info-pill">Sarr ${gameState.trump.level}</span>`;
     }
   }
   const targetTxt = gameState.seriesTarget ? ` (first to ${gameState.seriesTarget})` : '';
@@ -286,10 +284,9 @@ function renderTable(seat, seatName){
     const cardsLeftTag = left!=null ? `<div class="cards-left">${left} card${left===1?'':'s'} left</div>` : '';
     seatsHtml += `<div class="seat-pos ${pos}">
       <div class="player-chip ${isTurn?'turn':''} ${idx===seat?'me':''}">
-        ${crownTag}${botTag}${seatName(idx)} · T${teamOf(idx)}${streakTag}
+        ${crownTag}${botTag}${seatName(idx)} <span class="team-dot team${teamOf(idx)}"></span>${streakTag}
       </div>
       ${cardsLeftTag}
-      ${poopHtmlForSeat(idx)}
     </div>`;
   }
   let trickHtml='';
@@ -338,6 +335,7 @@ function renderTable(seat, seatName){
     ${seatsHtml}
     <div class="trick-center">${trickHtml}</div>
     <div class="elephant-orbit"><div class="elephant-counter">🐘</div></div>
+    ${centerPoopHtml()}
   </div>
   ${bottomPanel}`;
 }
@@ -444,11 +442,6 @@ function renderSeriesEnd(seat){
     ${r ? `<p class="muted">${outcomeLine(r)}</p>` : ''}
     <button class="btn" style="margin-top:10px;" onclick="startNewSeries()">Start New Series</button>
   </div>`;
-}
-
-function renderLog(){
-  const log = gameState.log||[];
-  return `<div class="panel"><h3>Table Log</h3><div class="log-panel">${log.slice().reverse().map(l=>`<div>${l}</div>`).join('')||'<div class="muted">Nothing yet.</div>'}</div></div>`;
 }
 
 boot();
